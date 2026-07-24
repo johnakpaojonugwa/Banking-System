@@ -1,0 +1,175 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RESTful Banking Management System API",
+    "description": "High-integrity, auditable, and concurrent-safe banking system API built with Node.js, Express, and PostgreSQL (Supabase). Features pessimistic row locking (`SELECT ... FOR UPDATE`), integer monetary units, append-only ledger, atomic two-sided transfers, loan management, tokenized cards, KYC upload, and balance reconciliation.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string", "format": "email" },
+          "full_name": { "type": "string" },
+          "role": { "type": "string", "enum": ["Customer", "Teller", "Bank_Manager", "Admin"] },
+          "kyc_status": { "type": "string", "enum": ["unverified", "pending", "verified", "rejected"] }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "customer_id": { "type": "string", "format": "uuid" },
+          "account_number": { "type": "string" },
+          "type": { "type": "string", "enum": ["Savings", "Current"] },
+          "balance": { "type": "string", "description": "Balance stored in smallest currency units (cents/kobo)" },
+          "overdraft_limit": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "frozen", "closed"] },
+          "currency": { "type": "string" }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "account_id": { "type": "string", "format": "uuid" },
+          "type": { "type": "string", "enum": ["DEPOSIT", "WITHDRAWAL", "TRANSFER_DEBIT", "TRANSFER_CREDIT", "LOAN_DISBURSEMENT", "LOAN_REPAYMENT", "REVERSAL"] },
+          "amount": { "type": "string" },
+          "balance_after": { "type": "string" },
+          "reference": { "type": "string" },
+          "transfer_id": { "type": "string", "format": "uuid", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "example": "INSUFFICIENT_FUNDS" },
+              "message": { "type": "string", "example": "Insufficient funds for transaction." },
+              "details": { "nullable": true }
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "full_name"],
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" },
+                  "full_name": { "type": "string" },
+                  "id_number": { "type": "string" },
+                  "address": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created successfully" },
+          "409": { "description": "Email or ID number already exists" }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Log in and obtain JWT token",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "JWT issued" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/v1/transfers": {
+      "post": {
+        "summary": "Atomic transfer between accounts",
+        "description": "Performs an atomic, two-sided ledger update with pessimistic row locking (`SELECT ... FOR UPDATE`) with deterministic ordering to prevent deadlocks and race conditions.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["source_account_id", "destination_account_number", "amount"],
+                "properties": {
+                  "source_account_id": { "type": "string", "format": "uuid" },
+                  "destination_account_number": { "type": "string" },
+                  "amount": { "type": "integer", "description": "Amount in smallest currency units (cents)" },
+                  "reference": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Transfer executed successfully" },
+          "400": { "description": "Insufficient funds or invalid account status" }
+        }
+      }
+    },
+    "/api/v1/admin/accounts/{id}/reconcile": {
+      "post": {
+        "summary": "Reconcile account balance against full transaction history",
+        "description": "Admin endpoint that recomputes the expected account balance from the complete append-only ledger history and reports any drift from the stored balance column.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Reconciliation result" },
+          "403": { "description": "Requires Admin role" }
+        }
+      }
+    }
+  }
+}
