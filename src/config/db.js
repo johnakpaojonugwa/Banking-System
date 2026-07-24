@@ -18,10 +18,18 @@ export const memoryDb = {
 };
 
 try {
-  pool = new Pool({
+  const poolConfig = {
     connectionString: env.DATABASE_URL,
     connectionTimeoutMillis: 3000,
-  });
+  };
+
+  if (env.DATABASE_URL && (env.DATABASE_URL.includes('supabase') || env.DATABASE_URL.includes('sslmode=require'))) {
+    poolConfig.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+
+  pool = new Pool(poolConfig);
 
   pool.on('error', (err) => {
     console.error('Unexpected PostgreSQL Pool Error:', err);
