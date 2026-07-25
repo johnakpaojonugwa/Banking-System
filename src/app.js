@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import fs from 'fs';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
+import env from './config/env.js';
 
 import authRoutes from './routes/authRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
@@ -27,7 +28,15 @@ if (fs.existsSync(swaggerSpecPath)) {
 
 // Security & Parsing Middlewares
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
+
+const allowedOrigins = env.ALLOWED_ORIGINS === '*' ? '*' : env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: allowedOrigins !== '*',
+  })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

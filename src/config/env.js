@@ -17,6 +17,15 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.string().default('900000'),
   RATE_LIMIT_MAX: z.string().default('100'),
   UPLOAD_DIR: z.string().default('uploads'),
+  ALLOWED_ORIGINS: z.string().default('*'),
+}).refine((data) => {
+  if (data.NODE_ENV === 'production') {
+    return data.JWT_SECRET !== 'super_secret_banking_jwt_key_2026_change_in_production' && data.JWT_SECRET.length >= 32;
+  }
+  return true;
+}, {
+  message: 'JWT_SECRET must be at least 32 characters long and cannot be the default placeholder string in production.',
+  path: ['JWT_SECRET'],
 });
 
 const parseEnv = () => {

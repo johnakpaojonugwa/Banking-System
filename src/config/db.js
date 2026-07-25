@@ -35,11 +35,18 @@ try {
     console.error('Unexpected PostgreSQL Pool Error:', err);
   });
 } catch (err) {
+  if (env.NODE_ENV === 'production') {
+    console.error('CRITICAL: PostgreSQL Pool initialization failed in production environment:', err.message);
+    throw err;
+  }
   console.warn('PostgreSQL Pool initialization failed, defaulting to in-memory store:', err.message);
   useInMemory = true;
 }
 
 export async function initDb() {
+  if (useInMemory && env.NODE_ENV === 'production') {
+    throw new Error('Database pool is uninitialized. Running in-memory database is prohibited in production.');
+  }
   if (useInMemory) return;
   try {
     const client = await pool.connect();
@@ -47,6 +54,10 @@ export async function initDb() {
     client.release();
     console.log('Successfully connected to PostgreSQL database.');
   } catch (err) {
+    if (env.NODE_ENV === 'production') {
+      console.error('CRITICAL: PostgreSQL connection failed in production environment:', err.message);
+      throw err;
+    }
     console.warn(`PostgreSQL connection failed (${err.message}). Falling back to high-fidelity In-Memory Database Engine.`);
     useInMemory = true;
   }
