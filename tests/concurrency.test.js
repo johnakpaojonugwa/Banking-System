@@ -1,18 +1,25 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import db from '../src/config/db.js';
 import * as authService from '../src/services/authService.js';
 import * as accountService from '../src/services/accountService.js';
 import * as ledgerService from '../src/services/ledgerService.js';
+import * as generator from '../src/utils/accountNumberGenerator.js';
+import { setupTestDb } from './databaseHelper.js';
 
 describe('Financial Integrity & Concurrency Test Suite', () => {
   let user1, user2, acc1, acc2;
 
   beforeEach(async () => {
-    db.setUseInMemory(true);
-    db.memoryDb.users = [];
-    db.memoryDb.accounts = [];
-    db.memoryDb.transactions = [];
-    db.memoryDb.audit_logs = [];
+    if (process.env.FORCE_DB === 'true') {
+      db.setUseInMemory(false);
+      await setupTestDb();
+    } else {
+      db.setUseInMemory(true);
+      db.memoryDb.users = [];
+      db.memoryDb.accounts = [];
+      db.memoryDb.transactions = [];
+      db.memoryDb.audit_logs = [];
+    }
 
     user1 = await authService.registerUser({
       email: 'user1@example.com',
@@ -131,5 +138,32 @@ describe('Financial Integrity & Concurrency Test Suite', () => {
     expect(finalTotalMoney).toBe(initialTotalMoney);
     expect(updatedAcc1.balance).toBe('100000');
     expect(updatedAcc2.balance).toBe('100000');
+  });
+
+  it('should retry account creation on account number collision', async () => {
+    const spy = vi.spyOn(generator, 'generateAccountNumber');
+    
+    // First create a base account to capture a valid account number
+    const baseAcc = await accountService.openAccount({
+      customerId: user1.id,
+      type: 'Savings',
+    });
+    
+    const blockedNum = baseAcc.account_number;
+    
+    // Clear the spy history so we only measure calls made during the next account creation
+    spy.mockClear();
+    
+    // Force the generator to return the blocked number on the next attempt (inducing collision)
+    spy.mockReturnValueOnce(blockedNum);
+    
+    const newAcc = await accountService.openAccount({
+      customerId: user1.id,
+      type: 'Savings',
+    });
+    
+    expect(newAcc.account_number).not.toBe(blockedNum);
+    expect(spy).toHaveBeenCalledTimes(2); // Initial blocked return + actual unique backup generation
+    spy.mockRestore();
   });
 });

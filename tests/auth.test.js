@@ -2,12 +2,18 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import db from '../src/config/db.js';
+import { setupTestDb } from './databaseHelper.js';
 
 describe('Authentication & Authorization API', () => {
-  beforeEach(() => {
-    db.setUseInMemory(true);
-    db.memoryDb.users = [];
-    db.memoryDb.audit_logs = [];
+  beforeEach(async () => {
+    if (process.env.FORCE_DB === 'true') {
+      db.setUseInMemory(false);
+      await setupTestDb();
+    } else {
+      db.setUseInMemory(true);
+      db.memoryDb.users = [];
+      db.memoryDb.audit_logs = [];
+    }
   });
 
   it('should register a new user successfully with hashed password', async () => {

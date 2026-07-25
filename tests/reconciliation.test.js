@@ -4,16 +4,22 @@ import * as authService from '../src/services/authService.js';
 import * as accountService from '../src/services/accountService.js';
 import * as ledgerService from '../src/services/ledgerService.js';
 import * as reconciliationService from '../src/services/reconciliationService.js';
+import { setupTestDb } from './databaseHelper.js';
 
 describe('Reconciliation Engine Test Suite', () => {
   let user, admin, account;
 
   beforeEach(async () => {
-    db.setUseInMemory(true);
-    db.memoryDb.users = [];
-    db.memoryDb.accounts = [];
-    db.memoryDb.transactions = [];
-    db.memoryDb.audit_logs = [];
+    if (process.env.FORCE_DB === 'true') {
+      db.setUseInMemory(false);
+      await setupTestDb();
+    } else {
+      db.setUseInMemory(true);
+      db.memoryDb.users = [];
+      db.memoryDb.accounts = [];
+      db.memoryDb.transactions = [];
+      db.memoryDb.audit_logs = [];
+    }
 
     admin = await authService.registerUser({
       email: 'admin@reconcile.com',
@@ -54,9 +60,13 @@ describe('Reconciliation Engine Test Suite', () => {
   it('should detect balance drift if stored balance is modified out-of-band', async () => {
     await ledgerService.deposit({ accountId: account.id, amount: 50000, userId: user.id });
 
-    // Manually tamper with account balance in memory db to simulate out-of-band corruption
-    const accRecord = db.memoryDb.accounts.find((a) => a.id === account.id);
-    accRecord.balance = BigInt(60000); // Intentionally set to $600 instead of $500
+    // Manually tamper with account balance to simulate out-of-band corruption
+    if (db.isInMemory()) {
+      const accRecord = db.memoryDb.accounts.find((a) => a.id === account.id);
+      accRecord.balance = BigInt(60000); // Intentionally set to $600 instead of $500
+    } else {
+      await db.query(`UPDATE accounts SET balance = 60000 WHERE id = $1`, [account.id]);
+    }
 
     const auditRes = await reconciliationService.reconcileAccount(account.id, admin.id);
 

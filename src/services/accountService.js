@@ -4,16 +4,36 @@ import { generateAccountNumber } from '../utils/accountNumberGenerator.js';
 import { logAudit } from '../utils/auditLogger.js';
 
 export async function openAccount({ customerId, type = 'Savings', currency = 'USD', initialBalance = 0, overdraftLimit = 0 }, reqMeta = {}) {
-  const accountNumber = generateAccountNumber();
+  let attempts = 0;
+  const maxAttempts = 3;
+  let account = null;
 
-  const res = await db.query(
-    `INSERT INTO accounts (customer_id, account_number, type, balance, overdraft_limit, status, currency)
-     VALUES ($1, $2, $3, $4, $5, 'active', $6)
-     RETURNING *`,
-    [customerId, accountNumber, type, initialBalance, overdraftLimit, currency]
-  );
+  while (attempts < maxAttempts) {
+    attempts++;
+    const accountNumber = generateAccountNumber();
+    try {
+      const res = await db.query(
+        `INSERT INTO accounts (customer_id, account_number, type, balance, overdraft_limit, status, currency)
+         VALUES ($1, $2, $3, $4, $5, 'active', $6)
+         RETURNING *`,
+        [customerId, accountNumber, type, initialBalance, overdraftLimit, currency]
+      );
+      account = res.rows[0];
+      break;
+    } catch (err) {
+      const isUniqueViolation =
+        err.code === '23505' ||
+        err.message.includes('violates unique constraint') ||
+        err.message.includes('already exists') ||
+        err.message.includes('duplicate key');
 
-  const account = res.rows[0];
+      if (isUniqueViolation && attempts < maxAttempts) {
+        console.warn(`Account number collision detected for account number ${accountNumber}. Retrying (Attempt ${attempts} of ${maxAttempts})...`);
+        continue;
+      }
+      throw err;
+    }
+  }
 
   await logAudit({
     userId: customerId,
@@ -22,7 +42,7 @@ export async function openAccount({ customerId, type = 'Savings', currency = 'US
     entityId: account.id,
     ipAddress: reqMeta.ip,
     userAgent: reqMeta.userAgent,
-    details: { accountNumber, type, currency },
+    details: { accountNumber: account.account_number, type, currency },
   });
 
   return account;

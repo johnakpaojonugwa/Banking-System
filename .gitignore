@@ -3,6 +3,7 @@ node_modules/
 .agents/
 
 
+
 # Environment variables and secrets
 .env
 .env*.local

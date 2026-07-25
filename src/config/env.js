@@ -18,6 +18,10 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.string().default('100'),
   UPLOAD_DIR: z.string().default('uploads'),
   ALLOWED_ORIGINS: z.string().default('*'),
+  DB_POOL_MAX: z.string().default('20'),
+  DB_POOL_IDLE_TIMEOUT: z.string().default('30000'),
+  DB_POOL_CONN_TIMEOUT: z.string().default('10000'),
+  FORCE_DB: z.string().default('false'),
 }).refine((data) => {
   if (data.NODE_ENV === 'production') {
     return data.JWT_SECRET !== 'super_secret_banking_jwt_key_2026_change_in_production' && data.JWT_SECRET.length >= 32;

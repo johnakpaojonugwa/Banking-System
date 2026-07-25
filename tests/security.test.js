@@ -6,18 +6,24 @@ import * as authService from '../src/services/authService.js';
 import * as accountService from '../src/services/accountService.js';
 import * as loanService from '../src/services/loanService.js';
 import * as cardService from '../src/services/cardService.js';
+import { setupTestDb } from './databaseHelper.js';
 
 describe('Security & IDOR Hardening Test Suite', () => {
   let customerA, customerB, tokenA, tokenB, accountA, accountB, loanB, cardB;
 
   beforeEach(async () => {
-    db.setUseInMemory(true);
-    db.memoryDb.users = [];
-    db.memoryDb.accounts = [];
-    db.memoryDb.transactions = [];
-    db.memoryDb.loans = [];
-    db.memoryDb.cards = [];
-    db.memoryDb.audit_logs = [];
+    if (process.env.FORCE_DB === 'true') {
+      db.setUseInMemory(false);
+      await setupTestDb();
+    } else {
+      db.setUseInMemory(true);
+      db.memoryDb.users = [];
+      db.memoryDb.accounts = [];
+      db.memoryDb.transactions = [];
+      db.memoryDb.loans = [];
+      db.memoryDb.cards = [];
+      db.memoryDb.audit_logs = [];
+    }
 
     customerA = await authService.registerUser({
       email: 'customerA@sec.com',
@@ -41,7 +47,11 @@ describe('Security & IDOR Hardening Test Suite', () => {
     // Customer B applies for loan and has a card
     loanB = await loanService.applyLoan({ customerId: customerB.id, accountId: accountB.id, principalAmount: 50000, termMonths: 12 });
     // Manually disburse loan for B to test repayment
-    db.memoryDb.loans.find((l) => l.id === loanB.id).status = 'disbursed';
+    if (db.isInMemory()) {
+      db.memoryDb.loans.find((l) => l.id === loanB.id).status = 'disbursed';
+    } else {
+      await db.query(`UPDATE loans SET status = 'disbursed' WHERE id = $1`, [loanB.id]);
+    }
 
     cardB = await cardService.issueCard({ accountId: accountB.id }, customerB.id);
   });
@@ -93,7 +103,13 @@ describe('Security & IDOR Hardening Test Suite', () => {
     expect(res.body.data.role).toBe('Customer');
 
     // Double check database record
-    const userInDb = db.memoryDb.users.find((u) => u.email === 'maliciousadmin@sec.com');
+    let userInDb;
+    if (db.isInMemory()) {
+      userInDb = db.memoryDb.users.find((u) => u.email === 'maliciousadmin@sec.com');
+    } else {
+      const userRes = await db.query('SELECT * FROM users WHERE email = $1', ['maliciousadmin@sec.com']);
+      userInDb = userRes.rows[0];
+    }
     expect(userInDb.role).toBe('Customer');
   });
 
@@ -148,8 +164,17 @@ describe('Security & IDOR Hardening Test Suite', () => {
     expect(repay1.body.data.status).toBe('disbursed'); // Still disbursed, not paid_off because interest is unpaid!
     
     // Check that schedule installments were updated
-    const loanRecord = db.memoryDb.loans.find((l) => l.id === loanB.id);
-    const schedule = loanRecord.repayment_schedule;
+    let loanRecord;
+    if (db.isInMemory()) {
+      loanRecord = db.memoryDb.loans.find((l) => l.id === loanB.id);
+    } else {
+      const loanRes = await db.query('SELECT * FROM loans WHERE id = $1', [loanB.id]);
+      loanRecord = loanRes.rows[0];
+    }
+    let schedule = loanRecord.repayment_schedule;
+    if (typeof schedule === 'string') {
+      schedule = JSON.parse(schedule);
+    }
     
     // Installment amount is 4338. 50000 / 4338 = 11 installments fully paid, 1 partially paid.
     const paidInstallments = schedule.filter((inst) => inst.status === 'paid');
