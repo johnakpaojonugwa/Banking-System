@@ -348,18 +348,108 @@ export async function transfer({ sourceAccountId, destAccountNumber, amount, ref
 }
 
 /**
- * Gets transaction history for an account.
+ * Gets transaction history for an account with pagination, filtering, and sorting.
  */
-export async function getAccountTransactions(accountId, limit = 50) {
-  const res = await db.query(
-    `SELECT id, account_id, type, amount, balance_after, reference, transfer_id, related_transaction_id, created_by, created_at
-     FROM transactions
-     WHERE account_id = $1
-     ORDER BY created_at DESC
-     LIMIT $2`,
-    [accountId, limit]
-  );
-  return res.rows;
+export async function getAccountTransactions(accountId, options = {}) {
+  const limit = parseInt(options.limit, 10) || 50;
+  const offset = parseInt(options.offset, 10) || 0;
+  const type = options.type || null;
+  const startDate = options.startDate || null;
+  const endDate = options.endDate || null;
+  const order = (options.order || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+  if (db.isInMemory()) {
+    let rows = db.memoryDb.transactions.filter((t) => t.account_id === accountId);
+    
+    if (type) {
+      rows = rows.filter((t) => t.type === type);
+    }
+    if (startDate) {
+      rows = rows.filter((t) => new Date(t.created_at) >= new Date(startDate));
+    }
+    if (endDate) {
+      rows = rows.filter((t) => new Date(t.created_at) <= new Date(endDate));
+    }
+    
+    rows.sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return order === 'ASC' ? timeA - timeB : timeB - timeA;
+    });
+
+    const total = rows.length;
+    const paginated = rows.slice(offset, offset + limit).map((t) => ({
+      ...t,
+      amount: t.amount.toString(),
+      balance_after: t.balance_after.toString(),
+    }));
+
+    return {
+      transactions: paginated,
+      pagination: {
+        total,
+        limit,
+        offset,
+      },
+    };
+  }
+
+  // Real PostgreSQL query
+  let queryText = `
+    SELECT id, account_id, type, amount, balance_after, reference, transfer_id, related_transaction_id, created_by, created_at
+    FROM transactions
+    WHERE account_id = $1
+  `;
+  const params = [accountId];
+  let paramIndex = 2;
+
+  if (type) {
+    queryText += ` AND type = $${paramIndex++}`;
+    params.push(type);
+  }
+  if (startDate) {
+    queryText += ` AND created_at >= $${paramIndex++}`;
+    params.push(startDate);
+  }
+  if (endDate) {
+    queryText += ` AND created_at <= $${paramIndex++}`;
+    params.push(endDate);
+  }
+
+  queryText += ` ORDER BY created_at ${order} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+  params.push(limit, offset);
+
+  const res = await db.query(queryText, params);
+
+  // Get total count
+  let countQueryText = `SELECT COUNT(*) FROM transactions WHERE account_id = $1`;
+  const countParams = [accountId];
+  let countParamIndex = 2;
+
+  if (type) {
+    countQueryText += ` AND type = $${countParamIndex++}`;
+    countParams.push(type);
+  }
+  if (startDate) {
+    countQueryText += ` AND created_at >= $${countParamIndex++}`;
+    countParams.push(startDate);
+  }
+  if (endDate) {
+    countQueryText += ` AND created_at <= $${countParamIndex++}`;
+    countParams.push(endDate);
+  }
+
+  const countRes = await db.query(countQueryText, countParams);
+  const total = parseInt(countRes.rows[0].count, 10);
+
+  return {
+    transactions: res.rows,
+    pagination: {
+      total,
+      limit,
+      offset,
+    },
+  };
 }
 
 export default {

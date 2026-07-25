@@ -158,12 +158,21 @@ export async function getTransactions(req, res, next) {
       });
     }
 
-    const limit = parseInt(req.query.limit, 10) || 50;
-    const transactions = await ledgerService.getAccountTransactions(req.params.id, limit);
+    const options = {
+      limit: parseInt(req.query.limit, 10) || 50,
+      offset: parseInt(req.query.offset, 10) || 0,
+      type: req.query.type || null,
+      startDate: req.query.startDate || null,
+      endDate: req.query.endDate || null,
+      order: req.query.order || 'DESC',
+    };
+
+    const { transactions, pagination } = await ledgerService.getAccountTransactions(req.params.id, options);
 
     res.status(200).json({
       success: true,
       data: transactions,
+      meta: pagination,
     });
   } catch (err) {
     next(err);

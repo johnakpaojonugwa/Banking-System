@@ -13,9 +13,10 @@ import transferRoutes from './routes/transferRoutes.js';
 import loanRoutes from './routes/loanRoutes.js';
 import cardRoutes from './routes/cardRoutes.js';
 import beneficiaryRoutes from './routes/beneficiaryRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
+import responseEnvelope from './middleware/envelope.js';
 
 const app = express();
 
@@ -39,6 +40,10 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Standardize all JSON response envelopes
+app.use(responseEnvelope);
+
 
 // Interactive API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
