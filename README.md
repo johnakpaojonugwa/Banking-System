@@ -91,6 +91,11 @@ JWT_EXPIRES_IN=1d
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX=100
 UPLOAD_DIR=uploads
+ALLOWED_ORIGINS=*
+DB_POOL_MAX=20
+DB_POOL_IDLE_TIMEOUT=30000
+DB_POOL_CONN_TIMEOUT=10000
+FORCE_DB=false
 ```
 
 ### 3. Install Dependencies
@@ -126,16 +131,52 @@ Visit [http://localhost:3000/api-docs](http://localhost:3000/api-docs) in your b
 
 ---
 
+## Running with Docker
+
+You can run the entire API application stack locally along with an isolated PostgreSQL database using Docker Compose.
+
+### 1. Start the Containers
+```bash
+docker compose up -d
+```
+This builds the API server image, pulls PostgreSQL, runs a health check, executes database schema migrations automatically, and exposes the API on [http://localhost:3000](http://localhost:3000) with development hot-reloading active.
+
+### 2. View Container Logs
+```bash
+docker compose logs -f
+```
+
+### 3. Stop the Stack
+```bash
+docker compose down -v
+```
+
+---
+
 ## Testing with Vitest
 
-Run the test suite covering authentication, concurrent transfers, negative balance overdraft limits, and balance reconciliation:
+By default, tests run against a high-fidelity in-memory database simulation for speed. You can also run the integration and concurrency tests against a real PostgreSQL database.
 
+### 1. Default Mode (In-Memory Mock Engine)
 ```bash
 # Run tests once
 npm test
 
 # Run tests in watch mode
 npm run test:watch
+```
+
+### 2. Real Database Integration Mode (PostgreSQL / Supabase)
+To test transaction locking, database constraints, and unique indexes on a real database, set the `FORCE_DB=true` environment variable and run the test suite sequentially (disabling parallelism ensures test workers don't conflict on `TRUNCATE` operations):
+
+**On PowerShell (Windows):**
+```powershell
+$env:FORCE_DB="true"; npx vitest run --fileParallelism=false --maxWorkers=1
+```
+
+**On Bash (macOS/Linux):**
+```bash
+FORCE_DB=true npx vitest run --fileParallelism=false --maxWorkers=1
 ```
 
 ---
