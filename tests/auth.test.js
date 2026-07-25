@@ -77,4 +77,29 @@ describe('Authentication & Authorization API', () => {
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
   });
+
+  it('should temporarily lock an account after 5 consecutive failed login attempts', async () => {
+    await request(app).post('/api/v1/auth/register').send({
+      email: 'bruteforce@example.com',
+      password: 'SafePassword123!',
+      full_name: 'Brute Force Test',
+    });
+
+    for (let i = 0; i < 5; i++) {
+      const failRes = await request(app).post('/api/v1/auth/login').send({
+        email: 'bruteforce@example.com',
+        password: 'WrongPassword',
+      });
+      expect(failRes.status).toBe(401);
+    }
+
+    const lockRes = await request(app).post('/api/v1/auth/login').send({
+      email: 'bruteforce@example.com',
+      password: 'SafePassword123!',
+    });
+
+    expect(lockRes.status).toBe(403);
+    expect(lockRes.body.error.code).toBe('ACCOUNT_LOCKED');
+    expect(lockRes.body.error.message).toContain('temporarily locked');
+  });
 });

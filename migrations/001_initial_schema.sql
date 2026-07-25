@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS users (
     address TEXT,
     kyc_status kyc_status NOT NULL DEFAULT 'unverified',
     kyc_documents JSONB DEFAULT '[]'::jsonb,
+    failed_attempts INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

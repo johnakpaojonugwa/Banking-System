@@ -90,6 +90,8 @@ async function executeInMemoryQuery(text, params = []) {
       address: params[5] || null,
       kyc_status: params[6] || 'unverified',
       kyc_documents: [],
+      failed_attempts: 0,
+      locked_until: null,
       created_at: now,
       updated_at: now,
     };

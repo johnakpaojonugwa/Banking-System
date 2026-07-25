@@ -61,12 +61,57 @@ export async function loginUser({ email, password }, reqMeta = {}) {
   }
 
   const user = userRes.rows[0];
+
+  // Check if account is temporarily locked
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    const timeRemaining = Math.ceil((new Date(user.locked_until) - new Date()) / 1000 / 60);
+    const err = new Error(`Account is temporarily locked due to repeated failed login attempts. Try again in ${timeRemaining} minutes.`);
+    err.statusCode = 403;
+    err.code = 'ACCOUNT_LOCKED';
+    throw err;
+  }
+
   const isMatch = await bcrypt.compare(password, user.password_hash);
   if (!isMatch) {
+    const newFailedAttempts = (user.failed_attempts || 0) + 1;
+    let lockedUntil = null;
+    if (newFailedAttempts >= 5) {
+      lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    }
+
+    if (db.isInMemory()) {
+      const memUser = db.memoryDb.users.find((u) => u.id === user.id);
+      if (memUser) {
+        memUser.failed_attempts = newFailedAttempts;
+        memUser.locked_until = lockedUntil;
+      }
+    } else {
+      await db.query(
+        'UPDATE users SET failed_attempts = $1, locked_until = $2, updated_at = NOW() WHERE id = $3',
+        [newFailedAttempts, lockedUntil, user.id]
+      );
+    }
+
     const err = new Error('Invalid email or password.');
     err.statusCode = 401;
     err.code = ERROR_CODES.INVALID_CREDENTIALS;
     throw err;
+  }
+
+  // Reset failed attempts upon successful login
+  if (user.failed_attempts > 0 || user.locked_until) {
+    if (db.isInMemory()) {
+      const memUser = db.memoryDb.users.find((u) => u.id === user.id);
+      if (memUser) {
+        memUser.failed_attempts = 0;
+        memUser.locked_until = null;
+      }
+    } else {
+      await db.query(
+        'UPDATE users SET failed_attempts = 0, locked_until = NULL, updated_at = NOW() WHERE id = $1',
+        [user.id]
+      );
+    }
   }
 
   const payload = {
