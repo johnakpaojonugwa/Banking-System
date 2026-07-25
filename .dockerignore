@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.env
+.env*.local
+.git
+.gitignore
+.agents
+.gemini
+tests
+coverage
+uploads
+README.md
+docker-compose*.yml
+Dockerfile
