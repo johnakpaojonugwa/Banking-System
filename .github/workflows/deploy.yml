@@ -2,7 +2,7 @@ name: Staging Deployment
 on:
     workflow_dispatch:
     push:
-        branches: main
+        branches: master
 jobs:
     test:
         runs-on: ubuntu-latest
