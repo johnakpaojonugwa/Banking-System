@@ -1,17 +1,11 @@
-name: Staging Deployment
-on:
-    workflow_dispatch:
-    push:
-        branches: master
+name: Staging deployment 
+on: 
+  workflow_dispatch:
+  push:
+    branches: main
 jobs:
-    test:
-        runs-on: ubuntu-latest
-        steps:
-         - name: Display message
-           run: echo test succeeded
-
-    build:
-        runs-on: ubuntu-latest
-        steps:
-         - name: Display message
-           run: echo build succeeded
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display Message 
+        run: echo All is well that ends well
